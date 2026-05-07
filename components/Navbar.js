@@ -49,6 +49,7 @@ export default function Navbar() {
 
   const navLinks = [
     { name: "Home", href: "/" },
+    { name: "Why Clee", href: "/whyclee" },
     { name: "Features", href: "/features" },
     { name: "FAQ", href: "/faq" },
     { name: "Pricing", href: "/pricing" },

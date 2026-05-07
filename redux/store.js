@@ -7,6 +7,7 @@ import bookingSettingsReducer from "./slices/bookingSettingsSlice";
 import staffReducer from "./slices/staffSlice";
 import authReducer from "./slices/authSlice";
 import freeTrialReducer from "./slices/freeTrialSlice";
+import faqReducer from "./slices/faqSlice";
 
 export const store = configureStore({
   reducer: {
@@ -18,5 +19,6 @@ export const store = configureStore({
     staff: staffReducer,
     auth: authReducer,
     freeTrial: freeTrialReducer,
+    faq: faqReducer,
   },
 });

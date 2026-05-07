@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { Clock, Calendar, User, Mail, Phone, MessageSquare, ArrowLeft } from "lucide-react";
 import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
@@ -9,11 +9,12 @@ import { createWaitlist } from "../redux/actions/waitlistActions";
 import BookingLoader from "../components/BookingLoader";
 import SuccessModal from "../components/SuccessModal";
 import ErrorModal from "../components/ErrorModal";
+import { Api } from "../services/service";
 
 export default function Waitlist() {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const { services, extras } = router.query;
+  const { services, extras, staffId, staffName, date } = router.query;
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -21,6 +22,8 @@ export default function Waitlist() {
   const [errorMessage, setErrorMessage] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   let selectedServices = [];
   let selectedExtras = [];
@@ -44,6 +47,59 @@ export default function Waitlist() {
     notes: '',
     urgent: false
   });
+
+  // Pre-fill date from URL and fetch available slots
+  useEffect(() => {
+    if (date) {
+      setFormData(prev => ({ ...prev, preferredDate: date }));
+    }
+  }, [date]);
+
+  // Fetch available time slots for the staff on selected date
+  useEffect(() => {
+    const fetchAvailableSlots = async () => {
+      if (!staffId || !formData.preferredDate) return;
+
+      setLoadingSlots(true);
+      try {
+        // Generate all time slots (9am - 8pm, 5 min intervals)
+        const allSlots = [];
+        for (let h = 9; h <= 20; h++) {
+          for (let m = 0; m < 60; m += 5) {
+            if (h === 20 && m > 0) break;
+            const period = h < 12 ? 'am' : 'pm';
+            const displayH = h > 12 ? h - 12 : h;
+            const displayM = m.toString().padStart(2, '0');
+            allSlots.push(`${displayH}:${displayM}${period}`);
+          }
+        }
+
+        // Check each slot availability
+        const availableList = [];
+        for (const slot of allSlots) {
+          const res = await Api(
+            "get",
+            `booking/check-availability?staffId=${staffId}&date=${formData.preferredDate}&time=${slot}`
+          );
+          if (res?.status && res?.data) {
+            const data = res.data?.data || res.data;
+            if (data.available) {
+              availableList.push(slot);
+            }
+          }
+          // Only fetch first 50 available slots to avoid too many requests
+          if (availableList.length >= 50) break;
+        }
+        setAvailableSlots(availableList);
+      } catch (err) {
+        console.error('Error fetching slots:', err);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    fetchAvailableSlots();
+  }, [staffId, formData.preferredDate]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -305,6 +361,7 @@ export default function Waitlist() {
                         name="preferredDate"
                         value={formData.preferredDate}
                         onChange={handleInputChange}
+                        min={new Date().toISOString().split('T')[0]}
                         className="w-full pl-10 pr-4 py-3 text-gray-700 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
@@ -313,17 +370,51 @@ export default function Waitlist() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Preferred time (optional)
+                      {staffName && formData.preferredDate && (
+                        <span className="ml-1 text-xs text-blue-600 font-normal">
+                          — {decodeURIComponent(staffName)}'s available slots
+                        </span>
+                      )}
                     </label>
-                    <div className="relative">
-                      <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                      <input
-                        type="time"
-                        name="preferredTime"
-                        value={formData.preferredTime}
-                        onChange={handleInputChange}
-                        className="w-full pl-10 pr-4 text-gray-700 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
+                    {staffId && formData.preferredDate ? (
+                      loadingSlots ? (
+                        <div className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-400 text-sm text-center">
+                          Loading available slots...
+                        </div>
+                      ) : availableSlots.length > 0 ? (
+                        <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                          {availableSlots.map(slot => (
+                            <button
+                              key={slot}
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, preferredTime: slot }))}
+                              className={`py-2 px-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                                formData.preferredTime === slot
+                                  ? 'border-[#0A4D91] bg-blue-50 text-[#0A4D91]'
+                                  : 'border-gray-200 hover:border-[#0A4D91] text-gray-700'
+                              }`}
+                            >
+                              {slot}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="w-full px-4 py-3 border border-orange-300 rounded-xl bg-orange-50 text-orange-600 text-sm text-center">
+                          No available slots on this date
+                        </div>
+                      )
+                    ) : (
+                      <div className="relative">
+                        <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                        <input
+                          type="time"
+                          name="preferredTime"
+                          value={formData.preferredTime}
+                          onChange={handleInputChange}
+                          className="w-full pl-10 pr-4 text-gray-700 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 

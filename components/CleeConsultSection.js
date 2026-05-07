@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Minus } from 'lucide-react';
+import { useAppDispatch, useAppSelector } from '../redux/hooks';
+import { fetchConsultSection } from '../redux/actions/faqActions';
 
 const CleeConsultSection = () => {
   const [openFaq, setOpenFaq] = useState(null);
+  const dispatch = useAppDispatch();
+  const { consultSection: faqs } = useAppSelector((state) => state.faq);
 
   const features = [
     {
@@ -19,32 +23,9 @@ const CleeConsultSection = () => {
     }
   ];
 
-  const faqs = [
-    {
-      question: 'How does pricing work?',
-      answer: 'Clee uses transparent, scalable pricing—no hidden fees, no surprise charges. Choose from Solo, Signature, or Scale. Designed, full-team controls.'
-    },
-    {
-      question: 'Do I need marketing experience?',
-      answer: 'Clee comes with high-performing campaigns already written and automated. No copywriting, no agency, no setup—just results.'
-    },
-    {
-      question: 'How are last-minute slots filled?',
-      answer: 'Two ways, both automatic. You waitlist clients can self-add into the moment a slot opens. Or Clee broadcasts to your client base automatically to fill the gap—no manual outreach, no chasing, just bookings.'
-    },
-    {
-      question: 'Who is Clee for?',
-      answer: 'Skin clinics, salons, spas, solo, brick & mortar, team, multi-location, owner-it doesn\'t matter. If you take bookings, if you operate with clients, Clee is designed for you. Clee scales with you.'
-    },
-    {
-      question: 'What can I track?',
-      answer: 'Clee tracks revenue, bookings, repeat clients, and individual staff performance. Real-time dashboards, better visibility, smarter decisions. All automated.'
-    },
-    {
-      question: 'Can I try it first?',
-      answer: 'Yes. Start with a free trial—no credit card. Set it up and test everything. Onboard. Fill a calendar and watch your business run at a whole new level.'
-    }
-  ];
+  useEffect(() => {
+    dispatch(fetchConsultSection());
+  }, [dispatch]);
 
   return (
     <div className="w-full bg-white">
@@ -113,7 +94,7 @@ const CleeConsultSection = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
             {faqs.map((faq, index) => (
               <div
                 key={index}
@@ -121,29 +102,25 @@ const CleeConsultSection = () => {
                 style={{ 
                   background: 'linear-gradient(135deg, #1173D8 0%, #04294E 100%)',
                   color: 'white',
-                  minHeight: openFaq === index ? 'auto' : '120px'
                 }}
                 onClick={() => setOpenFaq(openFaq === index ? null : index)}
               >
                 <div className="flex justify-between items-start mb-3">
                   <h4 className="text-lg font-bold pr-4">{faq.question}</h4>
                   {openFaq === index ? (
-                    <Minus size={20} className="flex-shrink-0" />
+                    <Minus size={20} className="flex-shrink-0 mt-1" />
                   ) : (
-                    <Plus size={20} className="flex-shrink-0" />
+                    <Plus size={20} className="flex-shrink-0 mt-1" />
                   )}
                 </div>
-                <div 
-                  className="overflow-hidden transition-all duration-300"
-                  style={{
-                    maxHeight: openFaq === index ? '500px' : '0',
-                    opacity: openFaq === index ? 1 : 0
-                  }}
-                >
-                  <p className="text-white/90 text-sm leading-relaxed">
-                    {faq.answer}
-                  </p>
-                </div>
+                {openFaq === index && (
+                  <div className="mt-1">
+                    <div
+                      className="text-white/90 text-sm leading-relaxed"
+                      dangerouslySetInnerHTML={{ __html: faq.answer }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>

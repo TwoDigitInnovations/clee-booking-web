@@ -29,6 +29,9 @@ import {
   saveSchedulingStep,
   savePlanStep,
 } from "../redux/actions/freeTrialActions";
+import { isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-js';
+import PhoneInput from 'react-phone-input-2';
+import 'react-phone-input-2/lib/style.css';
 
 export default function FreeTrial() {
   const dispatch = useDispatch();
@@ -89,6 +92,14 @@ export default function FreeTrial() {
     accountNumber: "",
   });
   const [stepError, setStepError] = useState("");
+  const [profileErrors, setProfileErrors] = useState({});
+  const [brandingErrors, setBrandingErrors] = useState({});
+  const [servicesErrors, setServicesErrors] = useState({});
+  const [staffErrors, setStaffErrors] = useState({});
+  const [schedulingErrors, setSchedulingErrors] = useState({});
+  const [planErrors, setPlanErrors] = useState({});
+  const [businessPhoneError, setBusinessPhoneError] = useState('');
+  const [staffPhoneError, setStaffPhoneError] = useState('');
   const [csvFile, setCsvFile] = useState(null);
   const [csvPreview, setCsvPreview] = useState([]);
 
@@ -160,10 +171,71 @@ export default function FreeTrial() {
 
   const handleStep1Continue = async () => {
     setStepError("");
+    setProfileErrors({});
+    const errors = {};
+
+    // Provider type validation
+    if (!selectedType) {
+      errors.providerType = "Please select a provider type";
+    }
+
+    // Business name required
     if (!formData.businessName.trim()) {
-      setStepError("Business name is required");
+      errors.businessName = "Business name is required";
+    }
+
+    // Display name required
+    if (!formData.displayName.trim()) {
+      errors.displayName = "Display name is required";
+    }
+
+    // Bio required
+    if (!formData.bio.trim()) {
+      errors.bio = "Bio is required";
+    }
+
+    // Website required + format validation
+    if (!formData.website.trim()) {
+      errors.website = "Website is required";
+    } else {
+      try {
+        const url = new URL(formData.website.trim());
+        if (!["http:", "https:"].includes(url.protocol)) {
+          errors.website = "Website must start with http:// or https://";
+        }
+      } catch {
+        errors.website = "Please enter a valid website URL (e.g. https://yourdomain.com)";
+      }
+    }
+
+    // Instagram required + format validation
+    if (!formData.instagram.trim()) {
+      errors.instagram = "Instagram handle is required";
+    } else {
+      const igVal = formData.instagram.trim();
+      const igRegex = /^@?[a-zA-Z0-9._]{1,30}$/;
+      if (!igRegex.test(igVal)) {
+        errors.instagram = "Please enter a valid Instagram handle (e.g. @yourbusiness)";
+      }
+    }
+
+    // Logo required
+    if (!formData.logo) {
+      errors.logo = "Logo is required";
+    }
+
+    // Cover photo required
+    if (!formData.coverPhoto) {
+      errors.coverPhoto = "Cover photo is required";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setProfileErrors(errors);
+      setStepError("Please fix the errors below before continuing");
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
+
     const res = await dispatch(
       saveProfileStep({ ...formData, providerType: selectedType })
     );
@@ -173,6 +245,45 @@ export default function FreeTrial() {
 
   const handleStep2Continue = async () => {
     setStepError("");
+    setBrandingErrors({});
+    const errors = {};
+
+    // Primary color hex validation
+    const hexRegex = /^#[0-9A-Fa-f]{6}$/;
+    if (!hexRegex.test(selectedPrimaryColor)) {
+      errors.primaryColor = "Please enter a valid 6-digit hex color (e.g. #006874)";
+    }
+    if (!hexRegex.test(selectedAccentColor)) {
+      errors.accentColor = "Please enter a valid 6-digit hex color (e.g. #26CCDA)";
+    }
+
+    // Location & contact
+    if (!formData.streetAddress.trim()) errors.streetAddress = "Street address is required";
+    if (!formData.suburb.trim()) errors.suburb = "Suburb is required";
+    if (!formData.state) errors.state = "State is required";
+    if (!formData.postcode.trim()) {
+      errors.postcode = "Postcode is required";
+    } else if (formData.postcode.trim().length > 7) {
+      errors.postcode = "Postcode cannot be more than 7 characters";
+    }
+    if (!formData.businessPhone.trim()) {
+      errors.businessPhone = "Business phone is required";
+    } else if (businessPhoneError) {
+      errors.businessPhone = businessPhoneError;
+    }
+    if (!formData.bookingEmail.trim()) {
+      errors.bookingEmail = "Booking email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.bookingEmail.trim())) {
+      errors.bookingEmail = "Please enter a valid email address";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setBrandingErrors(errors);
+      setStepError("Please fix the errors below before continuing");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     const res = await dispatch(
       saveBrandingStep({
         ...formData,
@@ -225,6 +336,27 @@ export default function FreeTrial() {
 
   const handleStep5Continue = async () => {
     setStepError("");
+    setSchedulingErrors({});
+    const errors = {};
+
+    // At least one day must be open
+    const anyDayOpen = Object.values(openingHours).some(h => h.enabled);
+    if (!anyDayOpen) {
+      errors.openingHours = "Please enable at least one working day";
+    }
+
+    // Cancellation policy required
+    if (!bookingSettings.cancellationPolicy.trim()) {
+      errors.cancellationPolicy = "Cancellation policy is required";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setSchedulingErrors(errors);
+      setStepError("Please fix the errors below before continuing");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     const res = await dispatch(saveSchedulingStep(openingHours, bookingSettings));
     if (res?.success) setCurrentStep(6);
     else setStepError(res?.message || "Failed to save scheduling");
@@ -232,6 +364,26 @@ export default function FreeTrial() {
 
   const handleStep3Continue = async () => {
     setStepError("");
+    setServicesErrors({});
+    const errors = {};
+
+    if (selectedCategories.length === 0) {
+      errors.categories = "Please select at least one service category";
+    }
+    if (services.length === 0) {
+      errors.services = "Please add at least one service";
+    }
+    if (depositOption === "fixed" && (!depositAmount || isNaN(depositAmount) || Number(depositAmount) <= 0)) {
+      errors.depositAmount = "Please enter a valid deposit amount";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setServicesErrors(errors);
+      setStepError("Please fix the errors below before continuing");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     const res = await dispatch(saveServicesStep(services, selectedCategories, depositOption, depositAmount));
     if (res?.success) setCurrentStep(4);
     else setStepError(res?.message || "Failed to save services");
@@ -239,6 +391,20 @@ export default function FreeTrial() {
 
   const handleStep4Continue = async () => {
     setStepError("");
+    setStaffErrors({});
+    const errors = {};
+
+    if (teamMembers.length === 0) {
+      errors.team = "Please add at least one team member";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setStaffErrors(errors);
+      setStepError("Please fix the errors below before continuing");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     const res = await dispatch(saveStaffStep(teamMembers));
     if (res?.success) setCurrentStep(5);
     else setStepError(res?.message || "Failed to save staff");
@@ -246,6 +412,36 @@ export default function FreeTrial() {
 
   const handleFinish = async () => {
     setStepError("");
+    setPlanErrors({});
+    const errors = {};
+
+    if (!selectedPlan) {
+      errors.plan = "Please select a plan";
+    }
+    if (!payoutAccount.accountName.trim()) errors.accountName = "Account name is required";
+    if (!payoutAccount.abn.trim()) {
+      errors.abn = "ABN is required";
+    } else if (!/^\d{2}\s?\d{3}\s?\d{3}\s?\d{3}$/.test(payoutAccount.abn.replace(/\s/g, ""))) {
+      errors.abn = "Please enter a valid 11-digit ABN";
+    }
+    if (!payoutAccount.bsb.trim()) {
+      errors.bsb = "BSB is required";
+    } else if (!/^\d{3}-?\d{3}$/.test(payoutAccount.bsb.trim())) {
+      errors.bsb = "Please enter a valid BSB (e.g. 123-456)";
+    }
+    if (!payoutAccount.accountNumber.trim()) {
+      errors.accountNumber = "Account number is required";
+    } else if (!/^\d{6,10}$/.test(payoutAccount.accountNumber.trim())) {
+      errors.accountNumber = "Account number must be 6-10 digits";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setPlanErrors(errors);
+      setStepError("Please fix the errors below before continuing");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     try {
       const res = await dispatch(savePlanStep(selectedPlan, payoutAccount));
       if (res?.success) {
@@ -281,6 +477,17 @@ export default function FreeTrial() {
         <title>Free Trial Setup | Clee</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
+      <style>{`
+        .react-tel-input .country-list .country,
+        .react-tel-input .country-list .country .country-name,
+        .react-tel-input .country-list .country .dial-code,
+        .react-tel-input .selected-flag .arrow {
+          color: #1f2937 !important;
+        }
+        .react-tel-input .country-list .search-box {
+          color: #1f2937 !important;
+        }
+      `}</style>
 
       <div className="min-h-screen bg-white overflow-x-hidden">
         <div className="bg-white border-b border-gray-200 px-4 py-4">
@@ -338,50 +545,58 @@ export default function FreeTrial() {
                       {providerTypes.map((type) => {
                         const Icon = type.icon;
                         return (
-                          <button key={type.id} onClick={() => setSelectedType(type.id)}
-                            className={`p-4 sm:p-6 rounded-lg border-2 transition-all hover:border-[#0A4D91] bg-white ${selectedType === type.id ? "border-[#0A4D91] shadow-sm" : "border-gray-200"}`}>
+                          <button key={type.id} onClick={() => { setSelectedType(type.id); setProfileErrors(prev => ({ ...prev, providerType: "" })); }}
+                            className={`p-4 sm:p-6 rounded-lg border-2 transition-all hover:border-[#0A4D91] bg-white ${selectedType === type.id ? "border-[#0A4D91] shadow-sm" : profileErrors.providerType ? "border-red-400" : "border-gray-200"}`}>
                             <Icon className="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-2 sm:mb-3 text-gray-700" />
                             <p className="text-xs sm:text-sm font-medium text-gray-900">{type.label}</p>
                           </button>
                         );
                       })}
                     </div>
+                    {profileErrors.providerType && (
+                      <p className="mt-2 text-sm text-red-500">{profileErrors.providerType}</p>
+                    )}
                   </div>
 
                   <div className="mb-6">
                     <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 sm:mb-6">Business profile</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Business name</label>
-                        <input type="text" name="businessName" value={formData.businessName} onChange={handleChange}
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Business name <span className="text-red-500">*</span></label>
+                        <input type="text" name="businessName" value={formData.businessName} onChange={(e) => { handleChange(e); setProfileErrors(prev => ({ ...prev, businessName: "" })); }}
                           placeholder="e.g. Lumina Clinical Wellness"
-                          className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${profileErrors.businessName ? "ring-2 ring-red-400" : ""}`} />
+                        {profileErrors.businessName && <p className="mt-1 text-xs text-red-500">{profileErrors.businessName}</p>}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Display name</label>
-                        <input type="text" name="displayName" value={formData.displayName} onChange={handleChange}
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Display name <span className="text-red-500">*</span></label>
+                        <input type="text" name="displayName" value={formData.displayName} onChange={(e) => { handleChange(e); setProfileErrors(prev => ({ ...prev, displayName: "" })); }}
                           placeholder="How clients see you"
-                          className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${profileErrors.displayName ? "ring-2 ring-red-400" : ""}`} />
+                        {profileErrors.displayName && <p className="mt-1 text-xs text-red-500">{profileErrors.displayName}</p>}
                       </div>
                     </div>
                     <div className="mb-3 sm:mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
-                      <textarea name="bio" value={formData.bio} onChange={handleChange}
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Bio <span className="text-red-500">*</span></label>
+                      <textarea name="bio" value={formData.bio} onChange={(e) => { handleChange(e); setProfileErrors(prev => ({ ...prev, bio: "" })); }}
                         placeholder="Tell us about your clinic..." rows="4"
-                        className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none resize-none text-gray-900 placeholder-gray-400" />
+                        className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none resize-none text-gray-900 placeholder-gray-400 ${profileErrors.bio ? "ring-2 ring-red-400" : ""}`} />
+                      {profileErrors.bio && <p className="mt-1 text-xs text-red-500">{profileErrors.bio}</p>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Website</label>
-                        <input type="url" name="website" value={formData.website} onChange={handleChange}
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Website <span className="text-red-500">*</span></label>
+                        <input type="text" name="website" value={formData.website} onChange={(e) => { handleChange(e); setProfileErrors(prev => ({ ...prev, website: "" })); }}
                           placeholder="https://yourdomain.com"
-                          className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${profileErrors.website ? "ring-2 ring-red-400" : ""}`} />
+                        {profileErrors.website && <p className="mt-1 text-xs text-red-500">{profileErrors.website}</p>}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Instagram</label>
-                        <input type="text" name="instagram" value={formData.instagram} onChange={handleChange}
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Instagram <span className="text-red-500">*</span></label>
+                        <input type="text" name="instagram" value={formData.instagram} onChange={(e) => { handleChange(e); setProfileErrors(prev => ({ ...prev, instagram: "" })); }}
                           placeholder="@handle"
-                          className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${profileErrors.instagram ? "ring-2 ring-red-400" : ""}`} />
+                        {profileErrors.instagram && <p className="mt-1 text-xs text-red-500">{profileErrors.instagram}</p>}
                       </div>
                     </div>
                   </div>
@@ -390,20 +605,24 @@ export default function FreeTrial() {
                     <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 sm:mb-6">Logo & cover photo</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-3">Logo</label>
-                        <label className="border-2 border-dashed border-gray-300 rounded-lg p-6 sm:p-8 text-center hover:border-[#0A4D91] transition-colors cursor-pointer bg-white flex flex-col items-center">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">Logo <span className="text-red-500">*</span></label>
+                        <label className={`border-2 border-dashed rounded-lg p-6 sm:p-8 text-center hover:border-[#0A4D91] transition-colors cursor-pointer bg-white flex flex-col items-center ${profileErrors.logo ? "border-red-400" : "border-gray-300"}`}
+                          onClick={() => setProfileErrors(prev => ({ ...prev, logo: "" }))}>
                           <Upload className="w-6 h-6 sm:w-8 sm:h-8 mb-2 text-gray-400" />
                           <p className="text-xs text-gray-400 font-medium">{formData.logo ? formData.logo.name : "UPLOAD LOGO"}</p>
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => setFormData({ ...formData, logo: e.target.files[0] })} />
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => { setFormData({ ...formData, logo: e.target.files[0] }); setProfileErrors(prev => ({ ...prev, logo: "" })); }} />
                         </label>
+                        {profileErrors.logo && <p className="mt-1 text-xs text-red-500">{profileErrors.logo}</p>}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-3">Cover photo</label>
-                        <label className="border-2 border-dashed border-gray-300 rounded-lg p-8 sm:p-12 text-center hover:border-[#0A4D91] transition-colors cursor-pointer bg-white flex flex-col items-center">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">Cover photo <span className="text-red-500">*</span></label>
+                        <label className={`border-2 border-dashed rounded-lg p-8 sm:p-12 text-center hover:border-[#0A4D91] transition-colors cursor-pointer bg-white flex flex-col items-center ${profileErrors.coverPhoto ? "border-red-400" : "border-gray-300"}`}
+                          onClick={() => setProfileErrors(prev => ({ ...prev, coverPhoto: "" }))}>
                           <Upload className="w-6 h-6 sm:w-8 sm:h-8 mb-2 text-gray-400" />
                           <p className="text-xs text-gray-400 font-medium">{formData.coverPhoto ? formData.coverPhoto.name : "UPLOAD COVER"}</p>
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => setFormData({ ...formData, coverPhoto: e.target.files[0] })} />
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => { setFormData({ ...formData, coverPhoto: e.target.files[0] }); setProfileErrors(prev => ({ ...prev, coverPhoto: "" })); }} />
                         </label>
+                        {profileErrors.coverPhoto && <p className="mt-1 text-xs text-red-500">{profileErrors.coverPhoto}</p>}
                       </div>
                     </div>
                   </div>
@@ -426,7 +645,7 @@ export default function FreeTrial() {
                       <label className="block text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Primary Colour</label>
                       <div className="flex items-center gap-2 sm:gap-3 mb-3">
                         {primaryColors.map((color) => (
-                          <button key={color} onClick={() => { setSelectedPrimaryColor(color); setFormData({ ...formData, primaryColor: color }); }}
+                          <button key={color} onClick={() => { setSelectedPrimaryColor(color); setFormData({ ...formData, primaryColor: color }); setBrandingErrors(prev => ({ ...prev, primaryColor: "" })); }}
                             className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full transition-all ${selectedPrimaryColor === color ? "ring-4 ring-[#0A4D91] ring-offset-2" : "hover:scale-110"}`}
                             style={{ backgroundColor: color }} />
                         ))}
@@ -434,15 +653,16 @@ export default function FreeTrial() {
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500 text-sm">#</span>
                         <input type="text" value={selectedPrimaryColor.replace("#", "")}
-                          onChange={(e) => setSelectedPrimaryColor(`#${e.target.value}`)}
-                          className="flex-1 px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900" maxLength="6" />
+                          onChange={(e) => { setSelectedPrimaryColor(`#${e.target.value}`); setBrandingErrors(prev => ({ ...prev, primaryColor: "" })); }}
+                          className={`flex-1 px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 ${brandingErrors.primaryColor ? "ring-2 ring-red-400" : ""}`} maxLength="6" />
                       </div>
+                      {brandingErrors.primaryColor && <p className="mt-1 text-xs text-red-500">{brandingErrors.primaryColor}</p>}
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Accent Colour</label>
                       <div className="flex items-center gap-2 sm:gap-3 mb-3">
                         {accentColors.map((color) => (
-                          <button key={color} onClick={() => { setSelectedAccentColor(color); setFormData({ ...formData, accentColor: color }); }}
+                          <button key={color} onClick={() => { setSelectedAccentColor(color); setFormData({ ...formData, accentColor: color }); setBrandingErrors(prev => ({ ...prev, accentColor: "" })); }}
                             className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full transition-all ${selectedAccentColor === color ? "ring-4 ring-[#0A4D91] ring-offset-2" : "hover:scale-110"}`}
                             style={{ backgroundColor: color }} />
                         ))}
@@ -450,9 +670,10 @@ export default function FreeTrial() {
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500 text-sm">#</span>
                         <input type="text" value={selectedAccentColor.replace("#", "")}
-                          onChange={(e) => setSelectedAccentColor(`#${e.target.value}`)}
-                          className="flex-1 px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900" maxLength="6" />
+                          onChange={(e) => { setSelectedAccentColor(`#${e.target.value}`); setBrandingErrors(prev => ({ ...prev, accentColor: "" })); }}
+                          className={`flex-1 px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 ${brandingErrors.accentColor ? "ring-2 ring-red-400" : ""}`} maxLength="6" />
                       </div>
+                      {brandingErrors.accentColor && <p className="mt-1 text-xs text-red-500">{brandingErrors.accentColor}</p>}
                     </div>
                   </div>
 
@@ -460,22 +681,24 @@ export default function FreeTrial() {
                     <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 sm:mb-6">Location & contact</h2>
                     <div className="space-y-3 sm:space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Street address</label>
-                        <input type="text" name="streetAddress" value={formData.streetAddress} onChange={handleChange}
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Street address <span className="text-red-500">*</span></label>
+                        <input type="text" name="streetAddress" value={formData.streetAddress} onChange={(e) => { handleChange(e); setBrandingErrors(prev => ({ ...prev, streetAddress: "" })); }}
                           placeholder="123 Clinical Way"
-                          className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${brandingErrors.streetAddress ? "ring-2 ring-red-400" : ""}`} />
+                        {brandingErrors.streetAddress && <p className="mt-1 text-xs text-red-500">{brandingErrors.streetAddress}</p>}
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Suburb</label>
-                          <input type="text" name="suburb" value={formData.suburb} onChange={handleChange}
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Suburb <span className="text-red-500">*</span></label>
+                          <input type="text" name="suburb" value={formData.suburb} onChange={(e) => { handleChange(e); setBrandingErrors(prev => ({ ...prev, suburb: "" })); }}
                             placeholder="Wellness District"
-                            className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                            className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${brandingErrors.suburb ? "ring-2 ring-red-400" : ""}`} />
+                          {brandingErrors.suburb && <p className="mt-1 text-xs text-red-500">{brandingErrors.suburb}</p>}
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
-                          <select name="state" value={formData.state} onChange={handleChange}
-                            className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">State <span className="text-red-500">*</span></label>
+                          <select name="state" value={formData.state} onChange={(e) => { handleChange(e); setBrandingErrors(prev => ({ ...prev, state: "" })); }}
+                            className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 ${brandingErrors.state ? "ring-2 ring-red-400" : ""}`}>
                             <option value="">Select</option>
                             <option value="NSW">NSW</option>
                             <option value="VIC">VIC</option>
@@ -484,26 +707,77 @@ export default function FreeTrial() {
                             <option value="SA">SA</option>
                             <option value="TAS">TAS</option>
                           </select>
+                          {brandingErrors.state && <p className="mt-1 text-xs text-red-500">{brandingErrors.state}</p>}
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Postcode</label>
-                          <input type="text" name="postcode" value={formData.postcode} onChange={handleChange}
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Postcode <span className="text-red-500">*</span></label>
+                          <input type="text" name="postcode" value={formData.postcode} onChange={(e) => { handleChange(e); setBrandingErrors(prev => ({ ...prev, postcode: "" })); }}
                             placeholder="3000"
-                            className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                            maxLength={7}
+                            className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${brandingErrors.postcode ? "ring-2 ring-red-400" : ""}`} />
+                          {brandingErrors.postcode && <p className="mt-1 text-xs text-red-500">{brandingErrors.postcode}</p>}
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Business phone</label>
-                          <input type="tel" name="businessPhone" value={formData.businessPhone} onChange={handleChange}
-                            placeholder="+61 400 000 000"
-                            className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                        <div className="pb-36">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Business phone <span className="text-red-500">*</span></label>
+                          <div style={{ position: 'relative', zIndex: 100 }}>
+                          <PhoneInput
+                            country={'au'}
+                            value={formData.businessPhone}
+                            onChange={(phone) => {
+                              const fullPhone = phone.startsWith('+') ? phone : `+${phone}`;
+                              setFormData(prev => ({ ...prev, businessPhone: fullPhone }));
+                              setBrandingErrors(prev => ({ ...prev, businessPhone: "" }));
+                              setBusinessPhoneError('');
+                              if (fullPhone.length > 1) {
+                                try {
+                                  if (!isValidPhoneNumber(fullPhone)) {
+                                    setBusinessPhoneError('Please enter a valid phone number');
+                                  } else {
+                                    const parsed = parsePhoneNumber(fullPhone);
+                                    if (parsed) {
+                                      const nat = parsed.nationalNumber;
+                                      if (nat.length < 7) setBusinessPhoneError('Phone number is too short');
+                                      else if (nat.length > 15) setBusinessPhoneError('Phone number is too long');
+                                    }
+                                  }
+                                } catch {
+                                  setBusinessPhoneError('Invalid phone number format');
+                                }
+                              }
+                            }}
+                            inputStyle={{
+                              width: '100%',
+                              backgroundColor: '#F3F4F5',
+                              border: brandingErrors.businessPhone ? '1px solid #ef4444' : '1px solid transparent',
+                              borderRadius: '0.5rem',
+                              padding: '0.625rem 0.75rem 0.625rem 3rem',
+                              fontSize: '0.875rem',
+                              color: '#1f2937',
+                              height: '42px',
+                            }}
+                            buttonStyle={{
+                              backgroundColor: '#F3F4F5',
+                              border: brandingErrors.businessPhone ? '1px solid #ef4444' : '1px solid transparent',
+                              borderRadius: '0.5rem 0 0 0.5rem',
+                              height: '42px',
+                            }}
+                            containerClass="w-full"
+                            enableSearch
+                            dropdownStyle={{ zIndex: 9999, color: '#1f2937' }}
+                          />
+                          </div>
+                          {(brandingErrors.businessPhone || businessPhoneError) && (
+                            <p className="mt-1 text-xs text-red-500">{brandingErrors.businessPhone || businessPhoneError}</p>
+                          )}
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Booking email</label>
-                          <input type="email" name="bookingEmail" value={formData.bookingEmail} onChange={handleChange}
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Booking email <span className="text-red-500">*</span></label>
+                          <input type="text" name="bookingEmail" value={formData.bookingEmail} onChange={(e) => { handleChange(e); setBrandingErrors(prev => ({ ...prev, bookingEmail: "" })); }}
                             placeholder="bookings@cleebeauty.com"
-                            className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                            className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${brandingErrors.bookingEmail ? "ring-2 ring-red-400" : ""}`} />
+                          {brandingErrors.bookingEmail && <p className="mt-1 text-xs text-red-500">{brandingErrors.bookingEmail}</p>}
                         </div>
                       </div>
                     </div>
@@ -529,12 +803,13 @@ export default function FreeTrial() {
                     <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Service categories</h2>
                     <div className="flex flex-wrap gap-2 sm:gap-3">
                       {serviceCategories.map((category) => (
-                        <button key={category} onClick={() => toggleCategory(category)}
+                        <button key={category} onClick={() => { toggleCategory(category); setServicesErrors(prev => ({ ...prev, categories: "" })); }}
                           className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${selectedCategories.includes(category) ? "bg-[#0A4D91] text-white" : "bg-blue-50 text-[#0A4D91] hover:bg-blue-100"}`}>
                           {category}
                         </button>
                       ))}
                     </div>
+                    {servicesErrors.categories && <p className="mt-2 text-sm text-red-500">{servicesErrors.categories}</p>}
                   </div>
 
                   <div className="mb-6">
@@ -579,6 +854,7 @@ export default function FreeTrial() {
                         <Plus className="w-5 h-5" /> Add service
                       </button>
                     </div>
+                    {servicesErrors.services && <p className="mt-2 text-sm text-red-500">{servicesErrors.services}</p>}
 
                     {showAddService && (
                       <div className="mt-4 p-4 border border-gray-200 rounded-lg bg-[#F3F4F5] space-y-3">
@@ -634,8 +910,9 @@ export default function FreeTrial() {
                     {depositOption === "fixed" && (
                       <div>
                         <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Amount for booking</label>
-                        <input type="text" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)}
-                          className="w-full max-w-xs px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900" />
+                        <input type="text" value={depositAmount} onChange={(e) => { setDepositAmount(e.target.value); setServicesErrors(prev => ({ ...prev, depositAmount: "" })); }}
+                          className={`w-full max-w-xs px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 ${servicesErrors.depositAmount ? "ring-2 ring-red-400" : ""}`} />
+                        {servicesErrors.depositAmount && <p className="mt-1 text-xs text-red-500">{servicesErrors.depositAmount}</p>}
                         <p className="text-xs text-gray-500 mt-2">Charged at time of booking to secure the appointment.</p>
                       </div>
                     )}
@@ -684,6 +961,7 @@ export default function FreeTrial() {
                     <button onClick={() => setShowAddStaff(true)} className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-[#0A4D91] font-medium flex items-center justify-center gap-2 hover:border-[#0A4D91] hover:bg-blue-50 transition-colors">
                       <Plus className="w-5 h-5" /> Add team member
                     </button>
+                    {staffErrors.team && <p className="mt-2 text-sm text-red-500">{staffErrors.team}</p>}
 
                     {showAddStaff && (
                       <div className="mt-4 p-4 border border-gray-200 rounded-lg bg-[#F3F4F5] space-y-3">
@@ -695,9 +973,53 @@ export default function FreeTrial() {
                           <input type="email" placeholder="Email" value={newStaff.email}
                             onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
                             className="w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
-                          <input type="tel" placeholder="Phone" value={newStaff.phone}
-                            onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          <div>
+                            <PhoneInput
+                              country={'au'}
+                              value={newStaff.phone}
+                              onChange={(phone) => {
+                                const fullPhone = phone.startsWith('+') ? phone : `+${phone}`;
+                                setNewStaff({ ...newStaff, phone: fullPhone });
+                                setStaffPhoneError('');
+                                if (fullPhone.length > 1) {
+                                  try {
+                                    if (!isValidPhoneNumber(fullPhone)) {
+                                      setStaffPhoneError('Please enter a valid phone number');
+                                    } else {
+                                      const parsed = parsePhoneNumber(fullPhone);
+                                      if (parsed) {
+                                        const nat = parsed.nationalNumber;
+                                        if (nat.length < 7) setStaffPhoneError('Phone number is too short');
+                                        else if (nat.length > 15) setStaffPhoneError('Phone number is too long');
+                                      }
+                                    }
+                                  } catch {
+                                    setStaffPhoneError('Invalid phone number format');
+                                  }
+                                }
+                              }}
+                              inputStyle={{
+                                width: '100%',
+                                backgroundColor: '#ffffff',
+                                border: staffPhoneError ? '1px solid #ef4444' : '1px solid transparent',
+                                borderRadius: '0.5rem',
+                                padding: '0.625rem 0.75rem 0.625rem 3rem',
+                                fontSize: '0.875rem',
+                                color: '#1f2937',
+                                height: '42px',
+                              }}
+                              buttonStyle={{
+                                backgroundColor: '#ffffff',
+                                border: staffPhoneError ? '1px solid #ef4444' : '1px solid transparent',
+                                borderRadius: '0.5rem 0 0 0.5rem',
+                                height: '42px',
+                              }}
+                              containerClass="w-full"
+                              enableSearch
+                              placeholder="Phone (optional)"
+                            />
+                            {staffPhoneError && <p className="mt-1 text-xs text-red-500">{staffPhoneError}</p>}
+                          </div>
                           <input type="text" placeholder="Specialty" value={newStaff.specialty}
                             onChange={(e) => setNewStaff({ ...newStaff, specialty: e.target.value })}
                             className="w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
@@ -863,11 +1185,15 @@ export default function FreeTrial() {
                         <div>
                           <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Cancellation policy</label>
                           <input type="text" value={bookingSettings.cancellationPolicy}
-                            onChange={(e) => setBookingSettings({ ...bookingSettings, cancellationPolicy: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900" />
+                            onChange={(e) => { setBookingSettings({ ...bookingSettings, cancellationPolicy: e.target.value }); setSchedulingErrors(prev => ({ ...prev, cancellationPolicy: "" })); }}
+                            className={`w-full px-4 py-2.5 bg-[#F3F4F5] border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 ${schedulingErrors.cancellationPolicy ? "ring-2 ring-red-400" : ""}`} />
+                          {schedulingErrors.cancellationPolicy && <p className="mt-1 text-xs text-red-500">{schedulingErrors.cancellationPolicy}</p>}
                         </div>
                       </div>
                     </div>
+                    {schedulingErrors.openingHours && (
+                      <p className="mb-4 text-sm text-red-500">{schedulingErrors.openingHours}</p>
+                    )}
 
                     <div className="flex items-start gap-3 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
                       <Info className="w-5 h-5 text-[#0A4D91] flex-shrink-0 mt-0.5" />
@@ -904,7 +1230,7 @@ export default function FreeTrial() {
                         { id: "pro", name: "Pro", desc: "Full-scale for high-volume clinics and multi-location businesses", price: "$299" },
                         { id: "enterprise", name: "Enterprise", desc: "Custom pricing, bespoke features, dedicated onboarding + 24/7 support", price: "Contact us" },
                       ].map((plan) => (
-                        <div key={plan.id} className={`border-${plan.recommended ? "4" : "2"} border-${plan.recommended ? "[#0A4D91]" : "gray-200"} rounded-lg p-4 sm:p-6 bg-white relative`}>
+                        <div key={plan.id} onClick={() => setSelectedPlan(plan.id)} className={`border-${plan.recommended ? "4" : "2"} border-${plan.recommended ? "[#0A4D91]" : "gray-200"} rounded-lg p-4 sm:p-6 bg-white relative cursor-pointer transition-all hover:shadow-md ${selectedPlan === plan.id ? "ring-2 ring-[#0A4D91]" : ""}`}>
                           {plan.recommended && (
                             <div className="absolute -top-3 right-4 sm:right-6 bg-[#0A4D91] text-white px-3 sm:px-4 py-1 rounded-full text-xs font-semibold">Recommended</div>
                           )}
@@ -916,7 +1242,8 @@ export default function FreeTrial() {
                               {plan.id !== "enterprise" && <span className="text-gray-500">/mo</span>}
                             </div>
                           </div>
-                          <button onClick={() => setSelectedPlan(plan.id)}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedPlan(plan.id); }}
                             className={`w-full py-2.5 sm:py-3 ${selectedPlan === plan.id ? "bg-[#0A4D91] text-white" : plan.id === "enterprise" ? "border-2 border-gray-300 text-gray-700" : "bg-gray-100 text-gray-700"} font-semibold rounded-lg hover:opacity-90 transition-colors text-sm sm:text-base`}>
                             {selectedPlan === plan.id ? "Current Selection" : plan.id === "enterprise" ? "Talk to Sales" : `Select ${plan.name}`}
                           </button>
@@ -937,28 +1264,32 @@ export default function FreeTrial() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Account Name</label>
+                        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Account Name <span className="text-red-500">*</span></label>
                         <input type="text" placeholder="e.g. Clee Medical Services" value={payoutAccount.accountName}
-                          onChange={(e) => setPayoutAccount({ ...payoutAccount, accountName: e.target.value })}
-                          className="w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          onChange={(e) => { setPayoutAccount({ ...payoutAccount, accountName: e.target.value }); setPlanErrors(prev => ({ ...prev, accountName: "" })); }}
+                          className={`w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${planErrors.accountName ? "ring-2 ring-red-400" : ""}`} />
+                        {planErrors.accountName && <p className="mt-1 text-xs text-red-500">{planErrors.accountName}</p>}
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">ABN</label>
+                        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">ABN <span className="text-red-500">*</span></label>
                         <input type="text" placeholder="12 123 123 123" value={payoutAccount.abn}
-                          onChange={(e) => setPayoutAccount({ ...payoutAccount, abn: e.target.value })}
-                          className="w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          onChange={(e) => { setPayoutAccount({ ...payoutAccount, abn: e.target.value }); setPlanErrors(prev => ({ ...prev, abn: "" })); }}
+                          className={`w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${planErrors.abn ? "ring-2 ring-red-400" : ""}`} />
+                        {planErrors.abn && <p className="mt-1 text-xs text-red-500">{planErrors.abn}</p>}
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">BSB</label>
+                        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">BSB <span className="text-red-500">*</span></label>
                         <input type="text" placeholder="123-456" value={payoutAccount.bsb}
-                          onChange={(e) => setPayoutAccount({ ...payoutAccount, bsb: e.target.value })}
-                          className="w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          onChange={(e) => { setPayoutAccount({ ...payoutAccount, bsb: e.target.value }); setPlanErrors(prev => ({ ...prev, bsb: "" })); }}
+                          className={`w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${planErrors.bsb ? "ring-2 ring-red-400" : ""}`} />
+                        {planErrors.bsb && <p className="mt-1 text-xs text-red-500">{planErrors.bsb}</p>}
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Account Number</label>
+                        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Account Number <span className="text-red-500">*</span></label>
                         <input type="text" placeholder="12345678" value={payoutAccount.accountNumber}
-                          onChange={(e) => setPayoutAccount({ ...payoutAccount, accountNumber: e.target.value })}
-                          className="w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400" />
+                          onChange={(e) => { setPayoutAccount({ ...payoutAccount, accountNumber: e.target.value }); setPlanErrors(prev => ({ ...prev, accountNumber: "" })); }}
+                          className={`w-full px-4 py-2.5 bg-white border-0 rounded-lg focus:ring-2 focus:ring-[#0A4D91] outline-none text-gray-900 placeholder-gray-400 ${planErrors.accountNumber ? "ring-2 ring-red-400" : ""}`} />
+                        {planErrors.accountNumber && <p className="mt-1 text-xs text-red-500">{planErrors.accountNumber}</p>}
                       </div>
                     </div>
                   </div>

@@ -14,7 +14,7 @@ const IndustrySection = () => {
     { name: 'Massage', image: '9.png', active: false },
     { name: 'Makeup artists', image: '10.png', active: false },
     { name: 'Tattoo & piercing', image: '11.png', active: false },
-    { name: 'And more', image: '12.png', active: false },
+    { name: 'And more', image: '11.png', active: false },
   ];
 
   return (
